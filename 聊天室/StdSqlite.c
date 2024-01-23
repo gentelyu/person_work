@@ -45,7 +45,7 @@ void CreateTable(SQL *s, const char *tableName, char **prolist, int row)
         }
     }
     char sql[4096] = {0};
-    sprintf(sql, "create table %s(%s);", tableName, property);
+    sprintf(sql, "create table if not exists %s(%s);", tableName, property);
     printf("%s\n",sql);
     if (sqlite3_exec(s->db, sql, NULL, NULL, NULL) != SQLITE_OK)
     {

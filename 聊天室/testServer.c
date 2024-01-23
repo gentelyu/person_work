@@ -554,6 +554,12 @@ int main(int argc, char const *argv[])
     }
 
     SQL *sq = InitSqlite("Users.db"); // 初始化数据库
+
+    //创建原始用户表
+    char *prolist[] = {"account","TEXT NOT NULL PRIMARY KEY","name","TEXT NOT NULL","password","TEXY NOT NULL","state","TEXT NOT NULL","sock","INTEGER"};
+    CreateTable(sq, "user", prolist, sizeof(prolist) / sizeof(prolist[0]) / 2);
+
+
     // sqlite3 *sq2 = GetSqlDb(sq);
 
     int acceptSork = 0;

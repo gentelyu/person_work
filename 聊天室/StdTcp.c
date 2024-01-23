@@ -7,6 +7,8 @@
 #include <unistd.h>
 #include "StdTcp.h"
 
+#define LISTEN_QUEUE_LENGTH 128
+
 //TCP服务器
 struct TcpServer
 {
@@ -38,10 +40,10 @@ TcpS *InitTcpServer(const char *IP, short int port)
         free(s);
         return NULL;
     }
-    struct sockaddr_in addr;//定义了一个sockaddr_in结构体变量addr，用于存储服务器的地址信息。
-    addr.sin_family = AF_INET;//设置addr结构体的sin_family成员为AF_INET，表示使用IPv4协议。
-    addr.sin_port = htons(port);//将传入的参数port转换为网络字节序，并赋值给addr结构体的sin_port成员，表示服务器的端口号。
-    addr.sin_addr.s_addr = inet_addr(IP);//将传入的参数IP转换为网络字节序的IP地址，并赋值给addr结构体的sin_addr.s_addr成员，表示服务器的IP地址。
+    struct sockaddr_in addr;                //定义了一个sockaddr_in结构体变量addr，用于存储服务器的地址信息。
+    addr.sin_family = AF_INET;              //设置addr结构体的sin_family成员为AF_INET，表示使用IPv4协议。
+    addr.sin_port = htons(port);            //将传入的参数port转换为网络字节序，并赋值给addr结构体的sin_port成员，表示服务器的端口号。
+    addr.sin_addr.s_addr = inet_addr(IP);   //将传入的参数IP转换为网络字节序的IP地址，并赋值给addr结构体的sin_addr.s_addr成员，表示服务器的IP地址。
 
     if(bind(s->sock,(struct sockaddr *)&addr,sizeof(addr)) < 0)
     //调用bind函数将套接字绑定到指定的地址上。
@@ -51,7 +53,7 @@ TcpS *InitTcpServer(const char *IP, short int port)
         return NULL;
     }
 
-    if(listen(s->sock,10) < 0)
+    if(listen(s->sock,LISTEN_QUEUE_LENGTH) < 0)
     //调用listen函数开始监听客户端连接请求。第二个参数10表示同时有多少个客户端可以连接到服务器。
     {
         perror("listen:");
@@ -62,16 +64,15 @@ TcpS *InitTcpServer(const char *IP, short int port)
     return s;
 }
 
-//将已经握手的客户端
 int TcpServerAccept(TcpS *s)
 {
     int acceptSock = 0;
     struct sockaddr_in addr;
-    socklen_t len = 0; 
-    if((acceptSock = accept(s->sock,(struct sockaddr*)&addr,&len)) < 0)
+    socklen_t clientAddressLen = 0;
+    if((acceptSock = accept(s->sock,(struct sockaddr*)&addr,&clientAddressLen)) < 0)
 //调用accept函数接受客户端的连接请求，并将返回的套接字赋值给acceptSock变量。
 //accept函数的第一个参数是服务器的监听套接字s->sock，
-//第二个参数是指向客户端地址的指针，第三个参数是指向len的指针，表示传入传出参数。
+//第二个参数是指向客户端地址的指针，第三个参数是指向clientAddressLen的指针，表示传入传出参数。
     {
         perror("accept:");
         return -1;
