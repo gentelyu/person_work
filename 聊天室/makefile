@@ -1,3 +1,6 @@
+#静态库
+LIBRARY = -lsqlite3
+
 # 服务器
 OBJECTS_SERVER=StdTcp.o testServer.o StdThread.o DoubleLinkList.o Queue.o ThreadPool.o StdSqlite.o StdFile.o
 TARGET_SERVER=server
@@ -13,13 +16,14 @@ TARGET_CLIENT=client
 all: $(TARGET_SERVER) $(TARGET_CLIENT)
 
 $(TARGET_SERVER): $(OBJECTS_SERVER)
+# 如果$(wildcard $@)和空相等(当前变量不存在)
 ifeq ($(wildcard $@),)
-	gcc $^ -o $@ -lsqlite3
+	gcc $^ -o $@ $(LIBRARY)
 endif
 
 $(TARGET_CLIENT): $(OBJECTS_CLIENT)
 ifeq ($(wildcard $@),)
-	gcc $^ -o $@ -lsqlite3
+	gcc $^ -o $@ $(LIBRARY)
 endif
 
 StdTcp.o: StdTcp.c
