@@ -366,7 +366,7 @@ int main(int argc, char const *argv[])
 
     // while (1)
     // {
-    //     // char temp[100] = {0};
+        // char temp[100] = {0};
     //     printf("1.单独发 2.群发\n");
     //     scanf("%d", &msg.flag);
     //     while (getchar() != '\n')

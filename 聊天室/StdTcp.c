@@ -6,14 +6,19 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include "StdTcp.h"
+#include <sys/epoll.h>
+#include <fcntl.h>
 
 #define LISTEN_QUEUE_LENGTH 128
 #define false -1
+#define BUFFER_SIZE 128
 
 //TCP服务器
 struct TcpServer
 {
     int sock;
+    int epoll_fd;
+    struct epoll_event events[BUFFER_SIZE];
 };
 //初始化服务器
 TcpS *InitTcpServer(const char *IP, short int port)
@@ -24,6 +29,8 @@ TcpS *InitTcpServer(const char *IP, short int port)
         printf("InitTcpServer malloc error!\n");
         return NULL;
     }
+    //清除脏数据
+    memset(s, 0, sizeof(TcpS));
     s->sock = socket(AF_INET,SOCK_STREAM,0);
     //调用socket函数创建一个套接字。AF_INET表示使用IPv4协议，SOCK_STREAM表示使用TCP协议，0表示选择默认的协议。
     if(s->sock < 0)
@@ -62,11 +69,99 @@ TcpS *InitTcpServer(const char *IP, short int port)
         return NULL;
     }
 
+
+    //创建epoll 红黑树 实例
+    s->epoll_fd = epoll_create(1);
+    if (s->epoll_fd == -1)
+    {
+        perror("epfd error");
+        exit(-1);
+    }
+
+    //将sockfd 添加到红黑树实例里面
+    struct epoll_event event;
+    /* 清除脏数据 */
+    memset(&event, 0, sizeof(event));
+    event.data.fd = s->sock;
+    event.events = EPOLLIN;     // 读事件
+    int ret = epoll_ctl(s->epoll_fd, EPOLL_CTL_ADD, s->sock, &event);
+    if (ret == -1)
+    {
+        perror("epoll ctl error");
+        exit(-1);
+    }
+
+
     return s;
 }
 
+
+
+
 int TcpServerAccept(TcpS *s)
 {
+#if 1
+
+    //监听到的数量
+    int nums = 0;
+    //读到的字节数
+    int readBytes = 0;
+
+    nums = epoll_wait(s->epoll_fd, s->events, BUFFER_SIZE, -1);
+    if (nums == -1)
+    {
+        perror("epoll_wait error");
+        exit(-1);
+    }
+
+    printf("epoll_wait 监听到：%d个文件描述符有变化\n", nums);
+
+    for (int idx = 0; idx < nums; idx++)
+    {
+        int this_fd = s->events[idx].data.fd;
+        if (this_fd == s->sock)
+        {
+            //有连接
+            int connfd = accept(s->sock, NULL, NULL);
+            if (connfd == -1)
+            {
+                perror("accept error");
+                exit(-1);
+            }
+
+            //将通信句柄this_fd 设置呈非阻塞模式
+            int flag = fcntl(connfd, F_GETFL);
+            flag |= O_NONBLOCK;
+            fcntl(connfd, F_SETFL, flag);
+
+            struct epoll_event conn_event;
+            memset(&conn_event, 0, sizeof(conn_event));
+            conn_event.data.fd = connfd;
+            //将默认的水平触发模式改成边沿触发模式
+            conn_event.events = EPOLLIN | EPOLLET;
+
+            //将通信句柄添加到树节点中
+            int ret = epoll_ctl(s->epoll_fd, EPOLL_CTL_ADD, connfd, &conn_event);
+            if (ret == -1)
+            {
+                perror("epoll_ctl error");
+                continue;
+            }
+
+            /*
+            打印...上线
+            */
+
+        }
+        else
+        {
+            //有通信
+            return this_fd;
+        }
+    }
+
+#else
+
     int acceptSock = 0;
     struct sockaddr_in addr;
     socklen_t clientAddressLen = 0;
@@ -79,6 +174,7 @@ int TcpServerAccept(TcpS *s)
         return false;
     }
     return acceptSock;//返回接受到的与客户端通信的套接字
+#endif
 }
 
 void TcpServerSend(int ClientSock, void *sentBuffer, size_t sendBufferSize)

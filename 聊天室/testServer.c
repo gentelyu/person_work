@@ -76,8 +76,13 @@ void *thread_handler(void *arg1, void *arg2)
         fflush(stdin);
 
         Msg msg = {0, 0, {0}, {0}, {0}, {0}, {0}, {0}};
-
-        TcpServerRecv(sock, &msg, sizeof(msg));
+        int serverRecv = 0;
+        serverRecv = TcpServerRecv(sock, &msg, sizeof(msg));
+        if (serverRecv <= 0)
+        {
+            break;
+        }
+        
         printf("recv flag : %d,fromname : %s,toname : %s,content: %s,order :%s\n",
                msg.flag, msg.fromName, msg.toName, msg.content, msg.order);
 
@@ -91,34 +96,6 @@ void *thread_handler(void *arg1, void *arg2)
 
         switch (msg.flag)
         {
-        // case 1:
-        // DBInsertTail(&list,CreateClient(sock,msg.fromName));
-        //     break;
-        // case 2://查找名字匹配msg.toName的客户端对象，并向其发送消息。
-        //     struct Node* travelPoint = list.head;
-        //     while (travelPoint != NULL)
-        //     {
-        //         C* c = (C *)travelPoint->data;
-        //         if(strcmp(c->name,msg.toName) == 0)
-        //         {
-        //             TcpServerSend(c->sock,&msg,sizeof(msg));
-        //             break;
-        //         }
-        //         travelPoint = travelPoint->next;
-        //     }
-        //     break;
-        // case 3://遍历整个链表向除了自己以外的所有人小消息
-        //     struct Node* travelPoint1 = list.head;
-        //     while (travelPoint1 != NULL)
-        //     {
-        //         C* c = (C *)travelPoint1->data;
-        //         if(strcmp(c->name,msg.fromName) != 0)
-        //         {
-        //             TcpServerSend(c->sock,&msg,sizeof(msg));
-        //         }
-        //         travelPoint1 = travelPoint1->next;
-        //     }
-        //     break;
         case 1:
             // 用户注册
             
