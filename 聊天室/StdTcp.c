@@ -8,6 +8,7 @@
 #include "StdTcp.h"
 
 #define LISTEN_QUEUE_LENGTH 128
+#define false -1
 
 //TCP服务器
 struct TcpServer
@@ -75,25 +76,34 @@ int TcpServerAccept(TcpS *s)
 //第二个参数是指向客户端地址的指针，第三个参数是指向clientAddressLen的指针，表示传入传出参数。
     {
         perror("accept:");
-        return -1;
+        return false;
     }
     return acceptSock;//返回接受到的与客户端通信的套接字
 }
 
-void TcpServerSend(int ClientSock, void *ptr, size_t size)
+void TcpServerSend(int ClientSock, void *sentBuffer, size_t sendBufferSize)
 {
-    if (send(ClientSock,ptr,size,0) < 0)
+    if (send(ClientSock,sentBuffer,sendBufferSize,0) < 0)
     {
         perror("send");
     }
 }
 
-void TcpServerRecv(int ClientSock, void *ptr, size_t size)
+int TcpServerRecv(int ClientSock, void *recvBuffer, size_t recvBufferSize)
 {
-    if (recv(ClientSock,ptr,size,0) < 0)
+    int ret = 0;
+    ret = recv(ClientSock, recvBuffer, recvBufferSize, 0);
+    if (ret < 0)
     {
-        perror("recv");
+        perror("recv error");
     }
+    else if (ret == 0)
+    {
+        printf("客户端 断开连接\n");
+        /* 关闭该客户端通信句柄 */
+        close(ClientSock);
+    }
+    return ret;
 }
 
 void ClearTcpServer(TcpS *s)
@@ -134,26 +144,37 @@ TcpC *InitTcpClient(const char *ServerIP, short int ServerPort)//初始化结构
     //使用connect函数连接到指定的服务器。
     //第一个参数是客户端套接字文件描述符c->sock，第二个参数是指向服务器地址结构体的指针，第三个参数是服务器地址结构体的大小。
     {
-        perror("connect:");
+        perror("connect error");
         free(c);
         return NULL;
     }
     return c;
 }
 
-void TcpClientSend(TcpC *c, void *ptr, size_t size)
+void TcpClientSend(TcpC *c, void *sendBuffer, size_t sendBufferSize)
 {
-    if(send(c->sock,ptr,size,0) < 0)
+    if(send(c->sock, sendBuffer, sendBufferSize,0) < 0)
     {
-        perror("send");
+        perror("send error");
     }
 }
 
-void TcpClientRecv(TcpC *c, void *ptr, size_t size)
+void TcpClientRecv(TcpC *c, void *recvBuffer, size_t recvBufferSize)
 {
-    if(recv(c->sock,ptr,size,0) < 0)
+    // if(recv(c->sock,ptr,size,0) < 0)
+    // {
+    //     perror("recv:");
+    // }
+    int ret = 0;
+    ret = recv(c->sock, recvBuffer, recvBufferSize, 0);
+    if (ret < 0)
     {
-        perror("recv");
+        perror("recv error");
+    }
+    else if (ret == 0)
+    {
+        printf("404");
+        exit(-1);
     }
 }
 
