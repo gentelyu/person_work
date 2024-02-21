@@ -37,12 +37,12 @@ typedef struct ThreadPool
 
 typedef struct Task // 任务结构体
 {
-    void *(*function)(void *,void *); // 线程函数
+    void *(*function)(void *); // 线程函数
     void *arg1;//参数1
-    void *arg2;//参数2
+    // void *arg2;//参数2
 } task;
 
-task *CreateTask(void *(*func)(void *,void *), void *arg1,void *arg2) // 创建任务
+task *CreateTask(void *(*func)(void *), void *arg) // 创建任务
 {
     task *t = (task *)malloc(sizeof(task));
     if (t == NULL)
@@ -51,9 +51,12 @@ task *CreateTask(void *(*func)(void *,void *), void *arg1,void *arg2) // 创建�
         return NULL;
     }
 
+    memset(t, 0, sizeof(task));
+    printf("3\n");
     t->function = func;
-    t->arg1 = arg1;
-    t->arg2 = arg2;
+    t->arg1 = arg;
+    printf("3\n");
+    // t->arg2 = arg2;  
     return t;
 }
 
@@ -109,7 +112,7 @@ void *thread_worker(void *arg) // 线程任务函数,放在创造线程函数里
         p->busy_thrd_num++;
         pthread_mutex_unlock(&p->busy_thrd_mutex);//计数器锁 关1
 
-        tk->function(tk->arg1,tk->arg2); // 调用这个函数，传入这个参数，就是执行这个函数
+        tk->function(tk->arg1); // 调用这个函数，传入这个参数，就是执行这个函数
 
         pthread_mutex_lock(&p->busy_thrd_mutex);//计数器锁 开2
         p->busy_thrd_num--;//线程执行完回电函数
@@ -198,7 +201,7 @@ ThreadP *InitThreadPool(int max_thrd_num, int min_thrd_num, int max_queue_size)
     return p;
 }
 
-void Threadp_AddTask(ThreadP *p, void *(*func)(void *,void *), void *arg1,void *arg2) // 加任务
+void Threadp_AddTask(ThreadP *p, void *(*func)(void *), void *arg) // 加任务
 {
     pthread_mutex_lock(&p->pool_mutex);                      // 操作队列，公共资源，先加锁
     while (GetQueueLen(&p->task_queue) == p->max_queue_size) // 判断任务队列有没有满
@@ -211,8 +214,9 @@ void Threadp_AddTask(ThreadP *p, void *(*func)(void *,void *), void *arg1,void *
         pthread_mutex_unlock(&p->pool_mutex); // 直接解锁
         return;
     }
-
-    QPush(&p->task_queue, CreateTask(func, arg1,arg2)); // 任务入队列
+    printf("2\n");
+    QPush(&p->task_queue, CreateTask(func, arg)); // 任务入队列
+    printf("2\n");
     pthread_cond_broadcast(&p->queue_not_empty);  // 解锁之前给线程发信号来执行
     pthread_mutex_unlock(&p->pool_mutex);         // 解锁
 }

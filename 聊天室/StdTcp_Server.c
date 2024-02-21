@@ -5,21 +5,17 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
-#include "StdTcp.h"
-#include <sys/epoll.h>
 #include <fcntl.h>
+#include <errno.h>
+#include "StdTcp_Server.h"
+
 
 #define LISTEN_QUEUE_LENGTH 128
 #define false -1
-#define BUFFER_SIZE 128
 
-//TCP服务器
-struct TcpServer
-{
-    int sock;
-    int epoll_fd;
-    struct epoll_event events[BUFFER_SIZE];
-};
+#define READ_BUFFER_SIZE 10
+
+
 //初始化服务器
 TcpS *InitTcpServer(const char *IP, short int port)
 {
@@ -98,8 +94,9 @@ TcpS *InitTcpServer(const char *IP, short int port)
 
 
 
-int TcpServerAccept(TcpS *s)
+int TcpServerAccept(TcpS *s, void *(*func)(void *), void *arg2)
 {
+    int ret = 0;
 #if 1
 
     //监听到的数量
@@ -107,58 +104,94 @@ int TcpServerAccept(TcpS *s)
     //读到的字节数
     int readBytes = 0;
 
-    nums = epoll_wait(s->epoll_fd, s->events, BUFFER_SIZE, -1);
-    if (nums == -1)
+    while(1)
     {
-        perror("epoll_wait error");
-        exit(-1);
+        nums = epoll_wait(s->epoll_fd, s->events, BUFFER_SIZE, -1);
+        if (nums == -1)
+        {
+            perror("epoll_wait error");
+            exit(-1);
+        }
+
+        printf("epoll_wait 监听到：%d个文件描述符有变化\n", nums);
+
+        for (int idx = 0; idx < nums; idx++)
+        {
+            int this_fd = s->events[idx].data.fd;
+            if (this_fd == s->sock)
+            {
+                //有连接
+                int connfd = accept(s->sock, NULL, NULL);
+                if (connfd == -1)
+                {
+                    perror("accept error");
+                    exit(-1);
+                }
+
+                //将通信句柄this_fd 设置呈非阻塞模式
+                int flag = fcntl(connfd, F_GETFL);
+                flag |= O_NONBLOCK;
+                fcntl(connfd, F_SETFL, flag);
+
+                struct epoll_event conn_event;
+                memset(&conn_event, 0, sizeof(conn_event));
+                conn_event.data.fd = connfd;
+                //将默认的水平触发模式改成边沿触发模式
+                conn_event.events = EPOLLIN | EPOLLET;
+
+                //将通信句柄添加到树节点中
+                int ret = epoll_ctl(s->epoll_fd, EPOLL_CTL_ADD, connfd, &conn_event);
+                if (ret == -1)
+                {
+                    perror("epoll_ctl error");
+                    continue;
+                }
+
+                /*
+                打印...上线
+                */
+
+            }
+            else
+            {
+                //有客户端通信
+                #if 0
+                while(1)
+                {
+                    char buffer[READ_BUFFER_SIZE] = { 0 };
+                    
+                    readBytes = read(this_fd, buffer, sizeof(buffer) - 1);
+                    if (readBytes < 0)
+                    {
+                        if (errno == EAGAIN)
+                        {
+                            /* todo...*/
+                            printf("read end...\n");
+                            break;
+                        }
+                        else
+                        {
+                            /* 将文件句柄从 红黑树上删掉 */
+                            epoll_ctl(s->epoll_fd, EPOLL_CTL_DEL, this_fd, NULL);
+                            /* 关闭文件句柄 */
+                            close(this_fd);
+                            break;
+                        }
+                    }
+                    else if (readBytes)
+                }
+
+                #else
+                /* 交给线程池处理 */
+                s->communicate_sock = this_fd;
+                printf("1\n");
+                Threadp_AddTask(s->pThreadPool, func, arg2);
+                printf("1\n");
+                #endif
+            }
+        }
     }
 
-    printf("epoll_wait 监听到：%d个文件描述符有变化\n", nums);
-
-    for (int idx = 0; idx < nums; idx++)
-    {
-        int this_fd = s->events[idx].data.fd;
-        if (this_fd == s->sock)
-        {
-            //有连接
-            int connfd = accept(s->sock, NULL, NULL);
-            if (connfd == -1)
-            {
-                perror("accept error");
-                exit(-1);
-            }
-
-            //将通信句柄this_fd 设置呈非阻塞模式
-            int flag = fcntl(connfd, F_GETFL);
-            flag |= O_NONBLOCK;
-            fcntl(connfd, F_SETFL, flag);
-
-            struct epoll_event conn_event;
-            memset(&conn_event, 0, sizeof(conn_event));
-            conn_event.data.fd = connfd;
-            //将默认的水平触发模式改成边沿触发模式
-            conn_event.events = EPOLLIN | EPOLLET;
-
-            //将通信句柄添加到树节点中
-            int ret = epoll_ctl(s->epoll_fd, EPOLL_CTL_ADD, connfd, &conn_event);
-            if (ret == -1)
-            {
-                perror("epoll_ctl error");
-                continue;
-            }
-
-            /*
-            打印...上线
-            */
-
-        }
-        else
-        {
-            //有通信
-            return this_fd;
-        }
-    }
 
 #else
 
@@ -175,6 +208,7 @@ int TcpServerAccept(TcpS *s)
     }
     return acceptSock;//返回接受到的与客户端通信的套接字
 #endif
+    return ret;
 }
 
 void TcpServerSend(int ClientSock, void *sentBuffer, size_t sendBufferSize)
@@ -185,102 +219,39 @@ void TcpServerSend(int ClientSock, void *sentBuffer, size_t sendBufferSize)
     }
 }
 
-int TcpServerRecv(int ClientSock, void *recvBuffer, size_t recvBufferSize)
+int TcpServerRecv(TcpS *s, int ClientSock, void *recvBuffer, size_t recvBufferSize)
 {
     int ret = 0;
     ret = recv(ClientSock, recvBuffer, recvBufferSize, 0);
     if (ret < 0)
     {
-        perror("recv error");
+        if (errno == EAGAIN)
+        {
+            printf("read end...\n");
+        }
+        else
+        {
+            /* 将该文件句柄 从红黑树上删掉 */
+            epoll_ctl(s->epoll_fd, EPOLL_CTL_DEL, ClientSock, NULL);
+            close(ClientSock);
+        }
+        // perror("recv error");
     }
     else if (ret == 0)
     {
         printf("客户端 断开连接\n");
+        /* 将该文件句柄 从红黑树上删掉 */
+        epoll_ctl(s->epoll_fd, EPOLL_CTL_DEL, ClientSock, NULL);
         /* 关闭该客户端通信句柄 */
         close(ClientSock);
     }
+
     return ret;
+    printf("TcpServerRecv...end\n");
 }
 
 void ClearTcpServer(TcpS *s)
 {
     close(s->sock);
     free(s);
-}
-
-
-
-struct TcpClient
-{
-    int sock;
-};
-
-TcpC *InitTcpClient(const char *ServerIP, short int ServerPort)//初始化结构体，接受两个参数，服务器IP地址、端口号。
-{
-    TcpC * c = (TcpC * )malloc(sizeof(TcpC));
-    if(c == NULL)
-    {
-        printf("InitTcpServer malloc error!\n");
-        return NULL;
-    }
-    c->sock = socket(AF_INET,SOCK_STREAM,0);//设置套接字属性，IPV4协议，TCP协议，默认属性
-    if(c->sock < 0)
-    {
-        perror("socket():");
-        free(c);
-        return NULL;
-    }
-
-    struct sockaddr_in ServerAddr;//
-    ServerAddr.sin_family = AF_INET;//设置服务器地址结构体ServerAddr的sin_family成员变量为AF_INET，表示使用IPv4地址。
-    ServerAddr.sin_port = htons(ServerPort);//将提供的服务器端口号ServerPort转换为网络字节序（大端字节序）并赋值给ServerAddr.sin_port，表示要连接的服务器端口号。
-    ServerAddr.sin_addr.s_addr = inet_addr(ServerIP);
-    //将提供的服务器IP地址ServerIP转换为网络字节序的二进制IP地址，并将其赋值给ServerAddr.sin_addr.s_addr，表示要连接的服务器IP地址。
-    if(connect(c->sock,(struct sockaddr *)&ServerAddr,sizeof(ServerAddr)) < 0)
-    //使用connect函数连接到指定的服务器。
-    //第一个参数是客户端套接字文件描述符c->sock，第二个参数是指向服务器地址结构体的指针，第三个参数是服务器地址结构体的大小。
-    {
-        perror("connect error");
-        free(c);
-        return NULL;
-    }
-    return c;
-}
-
-void TcpClientSend(TcpC *c, void *sendBuffer, size_t sendBufferSize)
-{
-    if(send(c->sock, sendBuffer, sendBufferSize,0) < 0)
-    {
-        perror("send error");
-    }
-}
-
-void TcpClientRecv(TcpC *c, void *recvBuffer, size_t recvBufferSize)
-{
-    // if(recv(c->sock,ptr,size,0) < 0)
-    // {
-    //     perror("recv:");
-    // }
-    int ret = 0;
-    ret = recv(c->sock, recvBuffer, recvBufferSize, 0);
-    if (ret < 0)
-    {
-        perror("recv error");
-    }
-    else if (ret == 0)
-    {
-        printf("404");
-        exit(-1);
-    }
-}
-
-void ClearTcpClient(TcpC *c)
-{
-    close(c->sock);
-    free(c);
-}
-
-int GetTcpSock(TcpC *c)
-{
-    return c->sock;
 }

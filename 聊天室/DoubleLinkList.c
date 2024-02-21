@@ -4,10 +4,11 @@
 
 int InitDLlist(DLlist *list)
 {
+    int ret = 0;
     list->head = NULL;
     list->len = 0;
     list->tail = NULL;
-    return 0;
+    return ret;
 }
 
 struct Node *CreateNode(ElementType element)
@@ -91,6 +92,11 @@ void DBInsertByIndex(DLlist *list, int index, ElementType element)//按位置插
     if(index > 0 && index < list->len)
     {
         struct Node *newNode = CreateNode(element);
+        if (newNode == NULL)
+        {
+            printf("InsertHead Create error!\n");
+            return ;
+        }
         struct Node *TravelPoint = list->head;
         while(index != 0)
         {

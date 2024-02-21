@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "StdTcp.h"
+#include "StdTcp_Client.h"
 #include "StdSqlite.h"
 #include "StdThread.h"
 #include "DoubleLinkList.h"

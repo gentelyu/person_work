@@ -2,14 +2,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sqlite3.h>
-#include "StdTcp.h"
+#include "StdTcp_Server.h"
 #include "StdFile.h"
 #include "StdSqlite.h"
 #include "StdThread.h"
 #include "DoubleLinkList.h"
 #include "ThreadPool.h"
 #include <time.h>
-
 #include <unistd.h>
 #define true 1
 #define false 0
@@ -18,6 +17,12 @@
 //     sqlite3 *db;
 //     int acceptSork;
 // } CP;
+
+// typedef struct arg
+// {
+//     TcpS *arg_tcp_server;
+//     SQL *arg_sql;
+// } arg;
 
 typedef struct Message // 数据包
 {
@@ -63,21 +68,25 @@ void FreeClient(C *c) // 释放客户端结构体
 
 DLlist list;
 
-void *thread_handler(void *arg1, void *arg2)
+void *thread_handler(void *arg2)
 {
-    sqlite3 *sq2 = GetSqlDb((SQL *)arg2);
+    printf("thread_handler\n");
+    TcpS * arg = (TcpS *)arg2;
+    sqlite3 *sq2 = GetSqlDb(arg->sql);
 
     time_t currentTime; // 时间函数
     struct tm *localTime;
 
-    int sock = (*(int *)arg1);
+    int sock = arg->communicate_sock;
+    printf("thread_handler\n");
     while (1)
     {
         fflush(stdin);
 
         Msg msg = {0, 0, {0}, {0}, {0}, {0}, {0}, {0}};
         int serverRecv = 0;
-        serverRecv = TcpServerRecv(sock, &msg, sizeof(msg));
+        printf("TcpServerRecv\n");
+        serverRecv = TcpServerRecv(arg, sock, &msg, sizeof(msg));
         if (serverRecv <= 0)
         {
             break;
@@ -113,19 +122,19 @@ void *thread_handler(void *arg1, void *arg2)
                 // 建立好友表
                 char *prolist[] = {"account", "TEXT PRIMARY KEY NOT NULL", "name", "TEXT NOT NULL"};
 
-                CreateTable((SQL *)arg2, msg.fromName, prolist, sizeof(prolist) / sizeof(prolist[0]) / 2);
+                CreateTable(arg->sql, msg.fromName, prolist, sizeof(prolist) / sizeof(prolist[0]) / 2);
 
                 //建立我的群聊列表
                 sprintf(msg.content,"%sGroup",msg.fromName);
                 char *prolist2[] = {"Groupname", "TEXT NOT NULL"};
 
-                CreateTable((SQL *)arg2, msg.content, prolist2, sizeof(prolist2) / sizeof(prolist2[0]) / 2);
+                CreateTable(arg->sql, msg.content, prolist2, sizeof(prolist2) / sizeof(prolist2[0]) / 2);
 
                 // 建立通知表
                 char informlist[50] = {0};
                 char *prolist1[] = {"name", "TEXT NOT NULL", "message", "TEXT NOT NULL", "state", "TEXT NOT NULL", "time", "int"};
                 sprintf(informlist, "%sinformlist", msg.fromName);
-                CreateTable((SQL *)arg2, informlist, prolist1, sizeof(prolist1) / sizeof(prolist1[0]) / 2);
+                CreateTable(arg->sql, informlist, prolist1, sizeof(prolist1) / sizeof(prolist1[0]) / 2);
 
                 strcpy(msg.fromName,"傻妞");
                 TcpServerSend(sock, &msg, sizeof(msg));
@@ -152,8 +161,8 @@ void *thread_handler(void *arg1, void *arg2)
 
                 
                 sprintf(msg.sock, "sock = %d", sock);
-                UpdateData((SQL *)arg2, "user", "state = '在线'", where);// 改为在线状态
-                UpdateData((SQL *)arg2, "user", msg.sock, where); // 每次登陆换上新套接字
+                UpdateData(arg->sql, "user", "state = '在线'", where);// 改为在线状态
+                UpdateData(arg->sql, "user", msg.sock, where); // 每次登陆换上新套接字
                 memset(msg.fromName, 0, sizeof(msg.fromName));
             }
             else
@@ -169,7 +178,7 @@ void *thread_handler(void *arg1, void *arg2)
             msg.flag = 100;
             // printf("%d",msg.flag);
             sprintf(msg.order, "select sock,state from user where account = '%s';", msg.toName);
-            SelectInfo((SQL *)arg2, msg.order, &result, &row, &colunm);
+            SelectInfo(arg->sql, msg.order, &result, &row, &colunm);
 
             int BigSock = atoi(result[2]);
             if (strcmp(result[3], "在线") == 0)
@@ -252,7 +261,7 @@ void *thread_handler(void *arg1, void *arg2)
             FreeInfoReault(result);
 
             sprintf(msg.order, "%sinformlist", msg.fromName);
-            GetTableInfo((SQL *)arg2, msg.order, &result, &row, &colunm);
+            GetTableInfo(arg->sql, msg.order, &result, &row, &colunm);
             for (int i = 0; i < row; i++)
             {
                 msg.flag = 3;
@@ -264,12 +273,12 @@ void *thread_handler(void *arg1, void *arg2)
             }
             
             sprintf(msg.order1,"select *from '%sinformlist' where state = '未读';",msg.fromName);
-            SelectInfo((SQL*)arg2,msg.order1,&result,&row,&colunm);
+            SelectInfo(arg->sql,msg.order1,&result,&row,&colunm);
             if(row > 0)
             {
                 char where[100] = {0};
                 sprintf(where,"state = '未读'");
-                UpdateData((SQL *)arg2,msg.order, "state = '已读'", where);
+                UpdateData(arg->sql,msg.order, "state = '已读'", where);
                 memset(msg.content, 0, sizeof(msg.content));
                 memset(where, 0, sizeof(where));
             }
@@ -282,7 +291,7 @@ void *thread_handler(void *arg1, void *arg2)
             FreeInfoReault(result);
             msg.flag = 8;
             sprintf(msg.order,"select message from '%sinformlist' where state = '未读' order by time asc limit 1;",msg.fromName);
-            SelectInfo((SQL*)arg2,msg.order,&result,&row,&colunm);
+            SelectInfo(arg->sql,msg.order,&result,&row,&colunm);
             if(row == 0)
             {
                 msg.flag = 9;
@@ -295,7 +304,7 @@ void *thread_handler(void *arg1, void *arg2)
             char *tableName = {0};
 
             sprintf(msg.order, "%sinformlist", msg.fromName);
-            UpdateData((SQL*)arg2,msg.order,"state = '已读'","state = '未读'  order by time asc limit 1");
+            UpdateData(arg->sql,msg.order,"state = '已读'","state = '未读'  order by time asc limit 1");
             memset(msg.order, 0, sizeof(msg.order));
             break;
         case 9:
@@ -303,10 +312,10 @@ void *thread_handler(void *arg1, void *arg2)
             //sprintf(msg.content,"%sGroup",msg.content);
 
             char *prolist4[] = {"account", "TEXT PRIMARY KEY NOT NULL", "name", "TEXT NOT NULL"};
-            CreateTable((SQL*)arg2,msg.content,prolist4,sizeof(prolist4) / sizeof(prolist4[0]) / 2);
+            CreateTable(arg->sql,msg.content,prolist4,sizeof(prolist4) / sizeof(prolist4[0]) / 2);
           
             sprintf(msg.order,"select name from user where account = '%s'",msg.fromName);
-            SelectInfo((SQL*)arg2,msg.order,&result,&row,&colunm);
+            SelectInfo(arg->sql,msg.order,&result,&row,&colunm);
             
             sprintf(msg.order,"insert into %s values('%s','%s');",msg.content,msg.fromName,result[1]);
             sprintf(msg.order1,"insert into %sGroup values('%s')",msg.fromName,msg.content);
@@ -333,7 +342,7 @@ void *thread_handler(void *arg1, void *arg2)
            
             //sprintf(msg.content,"%sGroup",msg.fromName);
             sprintf(msg.order,"select name from user where account = '%s'",msg.toName);
-            SelectInfo((SQL*)arg2,msg.order,&result,&row,&colunm);
+            SelectInfo(arg->sql,msg.order,&result,&row,&colunm);
             sprintf(msg.order,"insert into %s values('%s','%s');",msg.content,msg.toName,result[1]);
             sprintf(msg.order1,"insert into %sGroup values (%s)",msg.toName,msg.content);
             a = sqlite3_exec(sq2, msg.order, NULL, NULL, NULL); 
@@ -413,7 +422,7 @@ void *thread_handler(void *arg1, void *arg2)
                 localTime = localtime(&currentTime);
                 sprintf(msg.order, "select sock,state from user where account = '%s';", msg.toName);
                 
-                SelectInfo((SQL *)arg2, msg.order, &result, &row, &colunm);
+                SelectInfo((SQL *)arg, msg.order, &result, &row, &colunm);
                 
                 BigSock = atoi(result[2]);
                 
@@ -531,6 +540,22 @@ int main(int argc, char const *argv[])
     }
 
     SQL *sq = InitSqlite("Users.db"); // 初始化数据库
+#if 1
+    /* 将数据库结构体对象以及线程池对象放到Tcp服务器的结构体参数中 */
+    s->sql = sq;
+    s->pThreadPool = p;
+#else
+    /* 将要用到的参数放进结构体中 */
+    arg *pArg = (arg *)malloc(sizeof(arg));
+    if (!pArg)
+    {
+        printf("malloc error");
+        return -1;
+    }
+    memset(pArg, 0, sizeof(pArg));
+    pArg->arg_tcp_server = s;
+    pArg->arg_sql = sq;
+#endif
 
     //创建原始用户表
     char *prolist[] = {"account","TEXT NOT NULL PRIMARY KEY","name","TEXT NOT NULL","password","TEXY NOT NULL","state","TEXT NOT NULL","sock","INTEGER"};
@@ -539,11 +564,24 @@ int main(int argc, char const *argv[])
 
     // sqlite3 *sq2 = GetSqlDb(sq);
 
+    
+#if 0
     int acceptSork = 0;
     while ((acceptSork = TcpServerAccept(s)) > 0) // 每个初始化建立连接后的新套接字不变
     {
         Threadp_AddTask(p, thread_handler, &acceptSork, sq);
     }
+#else
+//这里将TcpServerAccept函数的返回值改为监听到的数量，
+    printf("TcpServerAccept\n");
+    TcpServerAccept(s, thread_handler, (void *)s);
+    printf("TcpServerAccept\n");
+
+
+
+
+
+#endif
 
     DestoryThreadPool(p);
 
