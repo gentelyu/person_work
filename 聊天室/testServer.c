@@ -12,17 +12,41 @@
 #include <unistd.h>
 #define true 1
 #define false 0
-// typedef struct CallbackParameter//回调函数参数
-// {
-//     sqlite3 *db;
-//     int acceptSork;
-// } CP;
 
-// typedef struct arg
-// {
-//     TcpS *arg_tcp_server;
-//     SQL *arg_sql;
-// } arg;
+/* 状态码 */
+enum status_client_to_server
+{
+    LOGIN,
+    REGISTRE,
+    SEND_MESSAGE,   //发消息
+    ADD_FRIENDS = 4,            //添加好友
+    AGREE_FRIENDS_APPLY= 5,     //同意好友请求
+    READ_ALL_INFO = 6,          //查看所有通知
+    READ_GINGLE_INFO = 7,       //按条查看通知
+    CREATE_GROUP = 9,            //创建群聊
+    GROUP_ADD = 10,              //群聊拉人
+    GROUP_SEND_MESSAGE = 11,         //发送群消息
+    SEND_FILE = 12,              //发送文件
+    RECV_FILE = 13              //接收文件 
+};
+
+enum status_server_to_client
+{
+    S_TO_C_ADD_USER_ERROR = 700,     //创建用户失败  1
+    S_TO_C_ADD_USER_SUCCESS = 701,   //创建用户成功  
+    S_TO_C_READ_INFORMATION = 702,   //接收通知
+    S_TO_C_SEND_ADD_FRIEND_ERROR = 703,  //发送添加好友失败
+    S_TO_C_SEND_ADD_FRIEND_SUCCESS = 704,    //发送添加好友成功
+    S_TO_C_UPDATE_FRIENDSHIP_ERROR = 705,    //更新好友列表失败
+    S_TO_C_UPDATE_FRIENDSHIP_SUCCESS = 706,    //更新好友列表成功
+    S_TO_C_LOGIN_ERROR = 707,                    //登陆失败
+    S_TO_C_INFORMATION_EMPTY = 708,              //当前已无未读消息
+    S_TO_C_UPDATE_GROUP_SUCCESS = 709,           //群聊列表更新成功
+    S_TO_C_UPDATE_GROUP_ERROR = 710,             //群聊列表根棍失败
+    S_TO_C_SEND_GROUP_MESSAGE = 711,             //发送群消息
+    S_TO_C_SEND_MESSAGE = 712,                //发消息
+};
+
 
 typedef struct Message // 数据包
 {
@@ -105,19 +129,19 @@ void *thread_handler(void *arg2)
 
         switch (msg.flag)
         {
-        case 1:
+        case REGISTRE:
             // 用户注册
             
             if (sqlite3_exec(sq2, msg.order, NULL, NULL, NULL) != SQLITE_OK) // 执行不成功，说明已有账户
             {
                 printf("insert table error :%s!\n", sqlite3_errmsg(sq2));
-                msg.flag = 1;
+                msg.flag = S_TO_C_ADD_USER_ERROR;
                 strcpy(msg.fromName,"傻妞");
                 TcpServerSend(sock, &msg, sizeof(msg));
             }
             else
             {
-                msg.flag = 2;
+                msg.flag = S_TO_C_ADD_USER_SUCCESS;
                 
                 // 建立好友表
                 char *prolist[] = {"account", "TEXT PRIMARY KEY NOT NULL", "name", "TEXT NOT NULL"};
@@ -141,8 +165,8 @@ void *thread_handler(void *arg2)
                 
             }
             break;
-        case 2: // 登录
-            msg.flag = 3;
+        case LOGIN: // 登录
+            msg.flag = S_TO_C_READ_INFORMATION;
             if (sqlite3_get_table(sq2, msg.order, &result, &row, &colunm, NULL) != SQLITE_OK)
             {
                 printf("SelectInfo error:%s", sqlite3_errmsg(sq2));
@@ -167,15 +191,15 @@ void *thread_handler(void *arg2)
             }
             else
             {
-                msg.flag = 8;
+                msg.flag = S_TO_C_LOGIN_ERROR;
                 strcpy(msg.content, "用户名或密码错误，登录失败!\n");
                 strcpy(msg.fromName,"傻妞");
                 TcpServerSend(sock, &msg, sizeof(msg));
             }
             break;
-        case 3: // 互发消息
+        case SEND_MESSAGE: // 互发消息
             
-            msg.flag = 100;
+            msg.flag = S_TO_C_SEND_MESSAGE;
             // printf("%d",msg.flag);
             sprintf(msg.order, "select sock,state from user where account = '%s';", msg.toName);
             SelectInfo(arg->sql, msg.order, &result, &row, &colunm);
@@ -193,7 +217,7 @@ void *thread_handler(void *arg2)
             }
             result = 0;
             break;
-        case 4: // 发送加好友
+        case ADD_FRIENDS: // 发送加好友
             currentTime = time(NULL);
             localTime = localtime(&currentTime); // 获取当前时间
 
@@ -208,20 +232,20 @@ void *thread_handler(void *arg2)
             if (sqlite3_exec(sq2, msg.order, NULL, NULL, NULL) != SQLITE_OK) // 执行不成功
             {
                 printf("insert table error :%s!\n", sqlite3_errmsg(sq2));
-                msg.flag = 4;
+                msg.flag = S_TO_C_SEND_ADD_FRIEND_ERROR;
                 strcpy(msg.fromName,"傻妞");
                 TcpServerSend(sock, &msg, sizeof(msg));
             }
             else
             {
-                msg.flag = 5;
+                msg.flag = S_TO_C_SEND_ADD_FRIEND_SUCCESS;
                 strcpy(msg.fromName,"傻妞");
                 TcpServerSend(sock, &msg, sizeof(msg));
             }
             memset(msg.content, 0, sizeof(msg.content));
             memset(msg.toName, 0, sizeof(msg.toName));
             break;
-        case 5: // 同意加好友
+        case AGREE_FRIENDS_APPLY: // 同意加好友
             memset(msg.order, 0, sizeof(msg.order));
             memset(msg.order1, 0, sizeof(msg.order));
             
@@ -242,7 +266,7 @@ void *thread_handler(void *arg2)
             int b = sqlite3_exec(sq2, msg.order1, NULL, NULL, NULL);
             if (a != SQLITE_OK && b != SQLITE_OK)
             {
-                msg.flag = 6;
+                msg.flag = S_TO_C_UPDATE_FRIENDSHIP_ERROR;
                 printf("SelectInfo error:%s", sqlite3_errmsg(sq2));
                 strcpy(msg.fromName,"傻妞");
                 TcpServerSend(sock, &msg, sizeof(msg));
@@ -250,25 +274,29 @@ void *thread_handler(void *arg2)
             }
             else
             {
-                msg.flag = 7;
+                msg.flag = S_TO_C_UPDATE_FRIENDSHIP_SUCCESS;
                 strcpy(msg.fromName,"傻妞");
                 TcpServerSend(sock, &msg, sizeof(msg));
             }
             memset(msg.order, 0, sizeof(msg.order));
             memset(msg.order1, 0, sizeof(msg.order));
             break;
-        case 6://查看所有消息
+        case READ_ALL_INFO://查看所有消息
             FreeInfoReault(result);
 
             sprintf(msg.order, "%sinformlist", msg.fromName);
             GetTableInfo(arg->sql, msg.order, &result, &row, &colunm);
+            if(row == 0)
+            {
+                msg.flag = S_TO_C_INFORMATION_EMPTY;
+                TcpServerSend(sock,&msg,sizeof(msg));
+                break;
+            }
             for (int i = 0; i < row; i++)
             {
-                msg.flag = 3;
+                msg.flag = S_TO_C_READ_INFORMATION;
                 printf("%d\n",msg.flag);
                 sprintf(msg.content, "[%s]..[%s]", result[5 + 4 * i], result[6 + 4 * i]);
-                
-
                 TcpServerSend(sock, &msg, sizeof(msg));
             }
             
@@ -287,14 +315,14 @@ void *thread_handler(void *arg2)
             memset(msg.order1, 0, sizeof(msg.order1));
             FreeInfoReault(result);
             break;
-        case 7://查看单条消息
+        case READ_GINGLE_INFO://查看单条消息
             FreeInfoReault(result);
-            msg.flag = 8;
+            msg.flag = S_TO_C_READ_INFORMATION;
             sprintf(msg.order,"select message from '%sinformlist' where state = '未读' order by time asc limit 1;",msg.fromName);
             SelectInfo(arg->sql,msg.order,&result,&row,&colunm);
             if(row == 0)
             {
-                msg.flag = 9;
+                msg.flag = S_TO_C_INFORMATION_EMPTY;
                 TcpServerSend(sock,&msg,sizeof(msg));
                 break;
             }
@@ -307,8 +335,8 @@ void *thread_handler(void *arg2)
             UpdateData(arg->sql,msg.order,"state = '已读'","state = '未读'  order by time asc limit 1");
             memset(msg.order, 0, sizeof(msg.order));
             break;
-        case 9:
-            msg.flag = 100;
+        case CREATE_GROUP:
+            msg.flag = S_TO_C_READ_INFORMATION;
             //sprintf(msg.content,"%sGroup",msg.content);
 
             char *prolist4[] = {"account", "TEXT PRIMARY KEY NOT NULL", "name", "TEXT NOT NULL"};
@@ -338,7 +366,7 @@ void *thread_handler(void *arg2)
 
             
             break;
-        case 10://拉人
+        case GROUP_ADD://拉人
            
             //sprintf(msg.content,"%sGroup",msg.fromName);
             sprintf(msg.order,"select name from user where account = '%s'",msg.toName);
@@ -349,27 +377,20 @@ void *thread_handler(void *arg2)
             b = sqlite3_exec(sq2, msg.order1, NULL, NULL, NULL); 
             if (a != SQLITE_OK && b != SQLITE_OK) // 
             {
-                msg.flag  == 11;
+                msg.flag  == S_TO_C_UPDATE_GROUP_ERROR;
                 printf("insert table error :%s!\n", sqlite3_errmsg(sq2));
     
                 strcpy(msg.fromName,"傻妞");
                 
                 TcpServerSend(sock, &msg, sizeof(msg));
             }
-            // else
-            // {
-            //     msg.flag = 10;
-            //     strcpy(msg.fromName,"傻妞");
-                
-            //     TcpServerSend(sock, &msg, sizeof(msg));
-            // }
 
             memset(msg.order, 0, sizeof(msg.order));
             //更新对方群聊列表
             sprintf(msg.order,"insert into %sGroup values('%s');",msg.toName,msg.content);
             if (sqlite3_exec(sq2, msg.order, NULL, NULL, NULL) != SQLITE_OK) // 
             {
-                msg.flag = 11;
+                msg.flag = S_TO_C_UPDATE_GROUP_ERROR;
                 printf("insert table error :%s!\n", sqlite3_errmsg(sq2));
     
                 strcpy(msg.fromName,"傻妞");
@@ -378,14 +399,14 @@ void *thread_handler(void *arg2)
             }
             else
             {
-                msg.flag = 10;
+                msg.flag = S_TO_C_UPDATE_GROUP_SUCCESS;
                 strcpy(msg.fromName,"傻妞");
                 
                 TcpServerSend(sock, &msg, sizeof(msg));
             }
             break;
-        case 11:
-                msg.flag = 12;
+        case GROUP_SEND_MESSAGE:
+                msg.flag = S_TO_C_SEND_GROUP_MESSAGE;
                 //char **result1[] = {0};
 
                 sprintf(msg.order,"select account from %s where account != '%s';",msg.toName,msg.fromName);
@@ -405,19 +426,10 @@ void *thread_handler(void *arg2)
 
                     TcpServerSend(BigSock,&msg,sizeof(msg));
                 }
-
-                // sprintf(msg.order,"select sock from user where account != '%s'and attribute = 'sock';",msg.fromName);
-                // sqlite3_get_table(sq2,msg.order,&result,&row,&colunm,NULL);
-                // for(int i = 0;i < row;i++)
-                // {
-                //     BigSock = atoi(result[i + 1]);
-                //     TcpServerSend(BigSock,&msg,sizeof(msg));
-                // }
-
             break;
-        case 12:
+        case SEND_FILE:
                 
-                msg.flag = 100;
+                msg.flag = S_TO_C_READ_INFORMATION;
                 currentTime = time(NULL);
                 localTime = localtime(&currentTime);
                 sprintf(msg.order, "select sock,state from user where account = '%s';", msg.toName);
@@ -433,27 +445,20 @@ void *thread_handler(void *arg2)
                     
                     printf("%s,%s,%s\n",msg.toName,msg.fromName,msg.order);
                     sprintf(msg.order1, "insert into %sinformlist values('%s','%s','未读',%d%d%d%d%d%d);", msg.toName, msg.fromName,\
-                   msg.order, localTime->tm_year + 1900, localTime->tm_mon + 1, localTime->tm_mday,localTime->tm_hour,localTime->tm_min,localTime->tm_sec);
-                    printf("oooooo---oooo\n");
-                    printf("-----------%s-----------------\n",msg.order1);
+                    msg.order, localTime->tm_year + 1900, localTime->tm_mon + 1, localTime->tm_mday,localTime->tm_hour,localTime->tm_min,localTime->tm_sec);
                     if (sqlite3_exec(sq2, msg.order1, NULL, NULL, NULL) != SQLITE_OK) 
                     {
-                        
                         printf("insert table error :%s!\n", sqlite3_errmsg(sq2));
-            
                         strcpy(msg.fromName,"傻妞");
                         strcpy(msg.content,"发送失败");
                         TcpServerSend(sock, &msg, sizeof(msg));
                     }
                     else
                     {
-                       
                         strcpy(msg.fromName,"傻妞");
                         strcpy(msg.content,"发送成功");
                         TcpServerSend(sock, &msg, sizeof(msg));
                     }
-
-
                     strcpy(msg.fromName,"傻妞");
                     strcpy(msg.content,"您收到一条消息通知");
 
@@ -468,47 +473,15 @@ void *thread_handler(void *arg2)
                     // 把消息存到数据库或者文件里，下次好友上线，直接发给他。
                 }
             break;
-        case 13:
+        case RECV_FILE:
                 char temp[100] = {0};
                 strcpy(temp,LoadFromFile(msg.content));
                 printf("%s\n",temp);
                 msg.back = strlen(temp);
                 strcpy(msg.content,temp);
-                msg.flag = 13;
+                msg.flag = S_TO_C_SEND_MESSAGE;
                 TcpServerSend(sock, &msg, sizeof(msg));
             break;
-        // case 15:
-                
-        //         sprintf(msg.order,"select account from %s where account != '%s';",msg.fromName,msg.fromName);
-        //         SelectInfo((SQL*)arg2,msg.order,&result,&row,&colunm);
-        //         if(row == 0)
-        //         {
-        //             msg.flag = 0;
-        //             strcpy(msg.content,"您暂时还没有好友");
-        //             TcpServerSend(sock,&msg,sizeof(msg));
-        //             break;
-        //         }
-        //         else if(row > 0)
-        //         {
-        //             for(int i = 0; i < row ; i++)
-        //             {
-        //                 sprintf(msg.order1,"select state from user where account = '%s';",result[1 + i]);
-        //                 SelectInfo((SQL*)arg2,msg.order1,&result1,&row1,&colunm1);
-        //                 if(result1[1] == "在线")
-        //                 {
-        //                     msg.flag = 100;
-        //                     strcpy(msg.fromName,"傻妞");
-        //                     strcpy(msg.content,result1[1]);
-        //                     TcpServerSend(sock,&msg,sizeof(msg));
-        //                 }
-                        
-        //             }
-                    
-        //         }
-                
-                
-
-        //         break;
         default:
             break;
         }
