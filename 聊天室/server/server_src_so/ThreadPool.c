@@ -1,11 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include "Queue.h"
-#include "ThreadPool.h"
+#include <pthread.h>
 #include "DoubleLinkList.h"
+#include "Queue.h"
 #include "StdThread.h"
-#include "pthread.h"
+#include "ThreadPool.h"
+
 
 #define true 1
 #define false 0
@@ -42,7 +43,7 @@ typedef struct Task // 任务结构体
     // void *arg2;//参数2
 } task;
 
-task *CreateTask(void *(*func)(void *), void *arg) // 创建任务
+static task *CreateTask(void *(*func)(void *), void *arg) // 创建任务
 {
     task *t = (task *)malloc(sizeof(task));
     if (t == NULL)
@@ -60,12 +61,12 @@ task *CreateTask(void *(*func)(void *), void *arg) // 创建任务
     return t;
 }
 
-void FreeTask(task *t) // 放任务
+static void FreeTask(task *t) // 放任务
 {
     free(t);
 }
 
-void *thread_worker(void *arg) // 线程任务函数,放在创造线程函数里
+static void *thread_worker(void *arg) // 线程任务函数,放在创造线程函数里
 {
     ThreadP *p = (ThreadP *)arg; // 得解决线程同步问题
 
@@ -122,7 +123,7 @@ void *thread_worker(void *arg) // 线程任务函数,放在创造线程函数里
     }
 }
 
-void *thread_manager(void *arg) // 管理函数
+static void *thread_manager(void *arg) // 管理函数
 {
     ThreadP *p = (ThreadP *)arg;
     while (p->shutdown != true) // 给个判断条件，在我想停下的时候他就停下来

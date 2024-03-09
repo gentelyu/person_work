@@ -1,17 +1,35 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <time.h>
 #include <sqlite3.h>
-#include "StdTcp_Server.h"
+
+#include "DoubleLinkList.h"
 #include "StdFile.h"
 #include "StdSqlite.h"
+#include "StdTcp_Server.h"
 #include "StdThread.h"
-#include "DoubleLinkList.h"
 #include "ThreadPool.h"
-#include <time.h>
-#include <unistd.h>
+
+
 #define true 1
 #define false 0
+#if 1
+const char * server_ip = "172.16.136.101";
+#else
+    /* 本地环回地址 */
+    const char *server_ip = "127.0.0.1";
+#endif
+
+#define server_port 8080
+
+#define SOCK_SIZE 30
+#define FROMENAME_SIZE 20
+#define TONAME_SIZE 20
+#define CONTENT_SIZE 1024
+#define ORDER_SIZE 2048
+#define ORDER1_SIZE 4096
 
 /* 状态码 */
 enum status_client_to_server
@@ -52,13 +70,13 @@ typedef struct Message // 数据包
 {
     int flag;
     int back;
-    char sock[30];
+    char sock[SOCK_SIZE];
 
-    char fromName[20];
-    char toName[20];
-    char content[1024]; // 消息
-    char order[2048];   // 让服务器执行的指令
-    char order1[4096];
+    char fromName[FROMENAME_SIZE];
+    char toName[TONAME_SIZE];
+    char content[CONTENT_SIZE]; // 消息
+    char order[ORDER_SIZE];   // 让服务器执行的指令
+    char order1[ORDER1_SIZE];
 
 
 } Msg;
@@ -490,13 +508,12 @@ void *thread_handler(void *arg2)
 
 int main(int argc, char const *argv[])
 {
+#if 0
     if (argc != 3) // 接受三个参数,这三个参数就是在终端输入的三个参数
     {
         printf("invalid nums!\n");
         return -1;
     }
-
-    //InitDLlist(&list);
 
     ThreadP *p = InitThreadPool(10, 20, 10); // 初始化线程池
     if (p == NULL)
@@ -511,8 +528,25 @@ int main(int argc, char const *argv[])
         printf("InitTcpServer error!\n");
         return -1;
     }
+#else
+    ThreadP *p = InitThreadPool(10, 20, 10); // 初始化线程池
+    if (p == NULL)
+    {
+        printf("threadpool init error!\n");
+        return -1;
+    }
+
+    TcpS *s = InitTcpServer(server_ip, server_port); // 初始化服务器
+    if (s == NULL)
+    {
+        printf("InitTcpServer error!\n");
+        return -1;
+    }
+
+#endif
 
     SQL *sq = InitSqlite("Users.db"); // 初始化数据库
+
 #if 1
     /* 将数据库结构体对象以及线程池对象放到Tcp服务器的结构体参数中 */
     s->sql = sq;

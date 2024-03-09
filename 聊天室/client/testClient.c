@@ -5,12 +5,21 @@
 #include "StdSqlite.h"
 #include "StdThread.h"
 #include "DoubleLinkList.h"
-#include "ThreadPool.h"
 #include "StdFile.h"
 #include <sqlite3.h>
 #include <unistd.h>
 #define true 1
 #define false 0
+
+const char * server_ip = "172.16.136.101";
+#define server_port 8080
+
+#define SOCK_SIZE 30
+#define FROMENAME_SIZE 20
+#define TONAME_SIZE 20
+#define CONTENT_SIZE 1024
+#define ORDER_SIZE 2048
+#define ORDER1_SIZE 4096
 
 enum status_client_to_server
 {
@@ -25,7 +34,7 @@ enum status_client_to_server
     GROUP_ADD = 10,              //群聊拉人
     GROUP_SEND_MESSAGE = 11,         //发送群消息
     SEND_FILE = 12,              //发送文件
-    RECV_FILE = 13              //接收文件    
+    RECV_FILE = 13              //接收文件
 };
 
 enum status_server_to_client
@@ -49,12 +58,12 @@ typedef struct Message
 {
     int flag;           // 消息类型
     int back;
-    char sock[30];
-    char fromName[20];  // 发送方
-    char toName[20];    // 接收方
-    char content[1024]; // 内容
-    char order[2048];   // 让服务器执行的指令
-    char order1[4096];
+    char sock[SOCK_SIZE];
+    char fromName[FROMENAME_SIZE];  // 发送方
+    char toName[TONAME_SIZE];    // 接收方
+    char content[CONTENT_SIZE]; // 内容
+    char order[ORDER_SIZE];   // 让服务器执行的指令
+    char order1[ORDER1_SIZE];
 } Msg;
 
 
@@ -128,6 +137,7 @@ void *thread_handler(void *arg) // 客户端接收消息
 
 int main(int argc, char const *argv[])
 {
+#if 0
     if (argc != 3)
     {
         printf("invalid nums!\n");
@@ -140,6 +150,15 @@ int main(int argc, char const *argv[])
         printf("InitTcpClient error!\n");
         return -1;
     }
+#else
+    TcpC *c = InitTcpClient(server_ip, server_port); // 初始化客户端，并与服务器连接
+    if (c == NULL)
+    {
+        printf("InitTcpClient error!\n");
+        return -1;
+    }
+
+#endif
 
     Msg msg = {0,0,{0},{0},{0},{0},{0},{0}};
     

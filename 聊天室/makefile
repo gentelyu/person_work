@@ -1,3 +1,5 @@
+#以前的老版makefile
+
 #静态库
 LIBRARY = -lsqlite3
 
@@ -28,34 +30,34 @@ ifeq ($(wildcard $@),)
 endif
 
 DoubleLinkList.o: DoubleLinkList.c
-	gcc -c $^ -o $@
+	gcc -g -c $^ -o $@
 
 Queue.o: Queue.c
-	gcc -c $^ -o $@
+	gcc -g -c $^ -o $@
 
 StdSqlite.o: StdSqlite.c
-	gcc -c $^ -o $@
+	gcc -g -c $^ -o $@
 
 StdThread.o: StdThread.c
-	gcc -c $^ -o $@
+	gcc -g -c $^ -o $@
 
 ThreadPool.o: ThreadPool.c
-	gcc -c $^ -o $@
+	gcc -g -c $^ -o $@
 
 StdFile.o: StdFile.c
-	gcc -c $^ -o $@
+	gcc -g -c $^ -o $@
 
 StdTcp_Server.o: StdTcp_Server.c
-	gcc -c $^ -o $@
+	gcc -g -c $^ -o $@
 
 StdTcp_Client.o: StdTcp_Client.c
-	gcc -c $^ -o $@
+	gcc -g -c $^ -o $@
 
 testServer.o: testServer.c
-	gcc -c $^ -o $@
+	gcc -g -c $^ -o $@
 
 testClient.o: testClient.c
-	gcc -c $^ -o $@
+	gcc -g -c $^ -o $@
 
 clean_server:
 	@rm -rf *.o $(TARGET_SERVER)
